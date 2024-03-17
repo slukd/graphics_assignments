@@ -1,5 +1,5 @@
-#include "glad/include/glad/glad.h"
 #include "scene.h"
+#include "glad/include/glad/glad.h"
 #include <iostream>
 
 	static void printMat(const glm::mat4 mat)
@@ -78,36 +78,40 @@
 		cameras.back()->MyTranslate(pos,0);
 	}
 
-	void Scene::Draw(int shaderIndx,int cameraIndx,int buffer,bool toClear,bool debugMode)
+	
+	void Scene::Draw(int shaderIndx, int cameraIndx, int buffer, bool toClear, bool debugMode, std::vector<int> viewportCoordinates = {})
 	{
 		glEnable(GL_DEPTH_TEST);
 		glm::mat4 Normal = MakeTrans();
-	
-		glm::mat4 MVP = cameras[cameraIndx]->GetViewProjection()*glm::inverse(cameras[cameraIndx]->MakeTrans());
+
+		glm::mat4 MVP = cameras[cameraIndx]->GetViewProjection() * glm::inverse(cameras[cameraIndx]->MakeTrans());
 		int p = pickedShape;
-		if(toClear)
+		if (toClear)
 		{
-			if(shaderIndx>0)
-				Clear(1,1,1,1);
+			if (shaderIndx > 0)
+				Clear(1, 1, 1, 1);
 			else
-				Clear(0,0,0,0);
+				Clear(0, 0, 0, 0);
 		}
 
-		for (unsigned int i=0; i<shapes.size();i++)
+		if (viewportCoordinates.size() > 0)
+			glViewport(viewportCoordinates[0], viewportCoordinates[1], viewportCoordinates[2], viewportCoordinates[3]);
+
+		for (unsigned int i = 0; i < shapes.size(); i++)
 		{
-			if(shapes[i]->Is2Render())
+			if (shapes[i]->Is2Render())
 			{
 				glm::mat4 Model = Normal * shapes[i]->MakeTrans();
-				
-				if(shaderIndx > 0)
+
+				if (shaderIndx > 0)
 				{
-					Update(MVP,Model,shapes[i]->GetShader());
-					shapes[i]->Draw(shaders,textures,false);	
+					Update(MVP, Model, shapes[i]->GetShader());
+					shapes[i]->Draw(shaders, textures, false);
 				}
-				else 
+				else
 				{ //picking
-					Update(MVP,Model,0);
-					shapes[i]->Draw(shaders,textures,true);
+					Update(MVP, Model, 0);
+					shapes[i]->Draw(shaders, textures, true);
 				}
 			}
 		}

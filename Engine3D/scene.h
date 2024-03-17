@@ -35,7 +35,7 @@ public:
 	virtual void WhenTranslate(){};
 	virtual void WhenRotate(){};
 	virtual void Motion(){};
-	virtual void Draw(int shaderIndx,int cameraIndx,int buffer,bool toClear,bool debugMode);
+	virtual void Draw(int shaderIndx,int cameraIndx,int buffer,bool toClear,bool debugMode, std::vector<int> viewportCoordinates);
 	virtual ~Scene(void);
 
 	void MoveCamera(int cameraIndx,int type,float amt);
