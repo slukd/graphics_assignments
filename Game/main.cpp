@@ -1,13 +1,13 @@
-#include "InputManager.h"
-// #include "display.h"
+//#include "InputManager.h"
+#include "display.h"
 #include "game.h"
 #include "glm\glm.hpp"
 
 int main(int argc,char *argv[])
 {
-	const int DISPLAY_WIDTH = 800;
-	const int DISPLAY_HEIGHT = 800;
-	const float CAMERA_ANGLE = 45.0f;
+	const int DISPLAY_WIDTH = 1024;
+	const int DISPLAY_HEIGHT = 1024;
+	const float CAMERA_ANGLE = 0.0f;
 	const float NEAR = 1.0f;
 	const float FAR = 100.0f;
 

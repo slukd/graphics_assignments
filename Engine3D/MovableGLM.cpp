@@ -27,7 +27,7 @@ glm::mat4 MovableGLM::MakeTrans(glm::mat4 &prevTransformations) const
 
 glm::mat4 MovableGLM::MakeTrans() const
 {
-	return   trans * rot * scl ;
+	return   trans * rot  ;
 }
 
 void MovableGLM::MyTranslate(glm::vec3 delta,int mode)
