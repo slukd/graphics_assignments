@@ -145,35 +145,32 @@ void Game::ray_tracing(std::string& scene_path, unsigned char* data)
 	}
 }
 
+// Calculates sub-pixel coordinates for anti-aliasing within a pixel.
+// Anti-aliasing is achieved by sampling at several points within each pixel and averaging the results.
 std::vector<glm::vec3> Game::anti_aliasing(int i, int j)
 {
-	float top_left_corner_of_pixel_y = (((float)i / HEIGHT) * 2.f - 1.f) * -1.f;
-	float top_left_corner_of_pixel_x = ((float)j / (WIDTH)) * 2.f - 1.f;
+    // Adjust the calculation for the Y-coordinate to flip the image vertically.
+    // This change ensures the top of the image corresponds to the top of the viewport.
+    float top_left_corner_of_pixel_y = 1.f - (2.f * i) / HEIGHT;
+    float top_left_corner_of_pixel_x = -1.f + (2.f * j) / WIDTH;
 
-	std::vector<glm::vec3> pixel_coordinates;
+    std::vector<glm::vec3> pixel_coordinates; // Stores the sub-pixel coordinates.
 
-	float pixel_y = top_left_corner_of_pixel_y - PIXELHEIGHT/3.f;
-	float pixel_x = top_left_corner_of_pixel_x + PIXELWIDTH/3.f;
-	glm::vec3 coordinates(pixel_x, pixel_y, 0.f);
-	pixel_coordinates.push_back(coordinates);
+    // Sampling points within the pixel to perform anti-aliasing.
+    for (int subY = 1; subY <= 2; ++subY) {
+        for (int subX = 1; subX <= 2; ++subX) {
+            // Adjust sub-pixel's Y-position calculation to align with the flipped Y-axis.
+            float pixel_y = top_left_corner_of_pixel_y - (PIXELHEIGHT * subY / 3.f) + PIXELHEIGHT / 2.f;
+            float pixel_x = top_left_corner_of_pixel_x + (PIXELWIDTH * subX / 3.f) - PIXELWIDTH / 2.f;
+            
+            // Add the calculated sub-pixel coordinate to the list.
+            pixel_coordinates.emplace_back(pixel_x, pixel_y, 0.f);
+        }
+    }
 
-	pixel_y = top_left_corner_of_pixel_y - 2.f*PIXELHEIGHT/3.f;
-	pixel_x = top_left_corner_of_pixel_x + PIXELWIDTH/3.f;
-	coordinates = glm::vec3(pixel_x, pixel_y, 0.f);
-	pixel_coordinates.push_back(coordinates);
-
-	pixel_y = top_left_corner_of_pixel_y - PIXELHEIGHT/3.f;
-	pixel_x = top_left_corner_of_pixel_x + 2.f*PIXELWIDTH/3.f;
-	coordinates = glm::vec3(pixel_x, pixel_y, 0.f);
-	pixel_coordinates.push_back(coordinates);
-
-	pixel_y = top_left_corner_of_pixel_y - 2.f*PIXELHEIGHT/3.f;
-	pixel_x = top_left_corner_of_pixel_x + 2.f*PIXELWIDTH/3.f;
-	coordinates = glm::vec3(pixel_x, pixel_y, 0.f);
-	pixel_coordinates.push_back(coordinates);
-	
-	return pixel_coordinates;
+    return pixel_coordinates;
 }
+
 
 glm::vec4 Game::send_ray(glm::vec3 origin, glm::vec3 direction, int previous_intersecting_shape_index, int num_of_call)
 {	
