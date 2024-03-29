@@ -7,14 +7,14 @@
 
 
 //constant parameters:
-glm::vec4 SPECULARVALUE(0.7, 0.7, 0.7, 0.f);
-int MAXDEPTH = 5; 
-float RESOLUTION = 256.f;
+glm::vec4 REFLECTIVITY(0.7, 0.7, 0.7, 0.f);
+int MAX_RECURSION_DEPTH = 5; 
+float IMAGE_RESOLUTION = 256.f;
 
 
 //global variables:
-std::vector<MyShape> my_shapes; 
-std::vector<Light> lights; 
+std::vector<MyShape> scene_shapes; 
+std::vector<Light> scene_lights; 
 glm::vec3 camera;
 glm::vec4 ambient_light;
 int DATASIZE;
@@ -49,8 +49,8 @@ void Game::Init()
 	AddShader("../res/shaders/pickingShader");	
 	AddShader("../res/shaders/basicShader");
 	
-	WIDTH = RESOLUTION;
-	HEIGHT = RESOLUTION;
+	WIDTH = IMAGE_RESOLUTION;
+	HEIGHT = IMAGE_RESOLUTION;
 	PIXELHEIGHT = 2.f / HEIGHT;
 	PIXELWIDTH = 2.f / WIDTH;
 	NUMOFCOLORS = 4;
@@ -111,20 +111,32 @@ Game::~Game(void)
 {
 }
 
+// Performs ray tracing to generate an image from the scene configuration.
 void Game::ray_tracing(std::string& scene_path, unsigned char* data)
 {
-	parse_scene(scene_path);
+    // Parse the scene from a file to set up objects and lighting.
+    parse_scene(scene_path);
 
-	glm::vec4 color = glm::vec4(0.f, 0.f, 0.f, 0.f);
-	for (int i = 0; i < HEIGHT; i++) {
-		for (int j = 0; j < WIDTH; j++) {
-			
-			std::vector<glm::vec3> pixel_coordinates = anti_aliasing(i, j);
-			for (int k = 0; k < pixel_coordinates.size(); k++) {
-				glm::vec3 ray_direction = glm::normalize(pixel_coordinates[k] - camera);
-				color += send_ray(camera, ray_direction, -1, 0);
-			}
-			color /= ((float)pixel_coordinates.size() + 1.f);
+    glm::vec4 color(0.f); // Initialize the color accumulator to black.
+
+    // Iterate over each pixel in the image.
+    for (int i = 0; i < HEIGHT; ++i) {
+        for (int j = 0; j < WIDTH; ++j) {
+
+            // Reset color for the current pixel.
+            color = glm::vec4(0.f);
+
+            // Get sub-pixel coordinates for anti-aliasing.
+            std::vector<glm::vec3> pixel_coordinates = anti_aliasing(i, j);
+
+            // Accumulate color by sending rays through each sub-pixel coordinate.
+            for (const auto& coord : pixel_coordinates) {
+                glm::vec3 ray_direction = glm::normalize(coord - camera);
+                color += send_ray(camera, ray_direction, -1, 0);
+            }
+
+            // Average the accumulated color by the number of samples.
+            color /= static_cast<float>(pixel_coordinates.size());
 
 			for (int k = 0; k < 4; k++) {
 				data[i*(int)WIDTH*4 + j*4 + k] = color[k];
@@ -163,27 +175,15 @@ std::vector<glm::vec3> Game::anti_aliasing(int i, int j)
 	return pixel_coordinates;
 }
 
-glm::vec3 Game::get_pixel_coordinates(int i, int j)
-{
-	float top_left_corner_of_pixel_y = (((float)i / HEIGHT) * 2.f - 1.f) * -1.f;
-	float top_left_corner_of_pixel_x = ((float)j / (WIDTH)) * 2.f - 1.f;
-
-	float center_of_pixel_y = top_left_corner_of_pixel_y - PIXELHEIGHT/2.f;
-	float center_of_pixel_x = top_left_corner_of_pixel_x + PIXELWIDTH/2.f;
-
-	glm::vec3 pixel_coordinates(center_of_pixel_x, center_of_pixel_y, 0.f);
-	return pixel_coordinates;
-}
-
 glm::vec4 Game::send_ray(glm::vec3 origin, glm::vec3 direction, int previous_intersecting_shape_index, int num_of_call)
 {	
-	if (num_of_call == MAXDEPTH)
+	if (num_of_call == MAX_RECURSION_DEPTH)
 		return glm::vec4(0.f, 0.f, 0.f, 0.f);
 	
 	glm::vec3 intersection_point(-INFINITY, -INFINITY, -INFINITY);
 	int intersecting_shape_index = -1;
 	float dist_to_intersection = INFINITY;
-	for (int i = 0; i < my_shapes.size(); i++) {
+	for (int i = 0; i < scene_shapes.size(); i++) {
 		if (i != previous_intersecting_shape_index) {
 			glm::vec3 new_intersection_point = check_shape_intersection(i, origin, direction, 0)[0];
 			float new_dist = glm::length(new_intersection_point - origin);
@@ -196,8 +196,8 @@ glm::vec4 Game::send_ray(glm::vec3 origin, glm::vec3 direction, int previous_int
 	}
 
 	glm::vec4 color(0.f, 0.f, 0.f, 0.f);
-	if (intersecting_shape_index != -1 && num_of_call < MAXDEPTH - 1) {
-		MyShape shape = my_shapes[intersecting_shape_index];
+	if (intersecting_shape_index != -1 && num_of_call < MAX_RECURSION_DEPTH - 1) {
+		MyShape shape = scene_shapes[intersecting_shape_index];
 		if (shape.o_r_t == "r") {
 			glm::vec3 N = shape.get_normal(intersection_point);
 
@@ -221,7 +221,7 @@ glm::vec4 Game::send_ray(glm::vec3 origin, glm::vec3 direction, int previous_int
 				N = shape.get_normal(second_intersection_point) * -1.f;
 				refracted_direction = glm::normalize(glm::refract(refracted_direction, N, 1.5f));
 				if (num_of_call == 0) {
-					for (int i = 0; i < lights.size(); i++) {
+					for (int i = 0; i < scene_lights.size(); i++) {
 						if (check_light_intersection(i, intersecting_shape_index, intersection_point)) {
 							color += specular(origin, intersection_point, intersecting_shape_index, i);
 						}
@@ -235,16 +235,16 @@ glm::vec4 Game::send_ray(glm::vec3 origin, glm::vec3 direction, int previous_int
 	}
 	
 	if (intersecting_shape_index != -1) {
-		MyShape shape = my_shapes[intersecting_shape_index];
+		MyShape shape = scene_shapes[intersecting_shape_index];
 
-		for (int i = 0; i < lights.size(); i++) {
+		for (int i = 0; i < scene_lights.size(); i++) {
 			if (check_light_intersection(i, intersecting_shape_index, intersection_point)) {
 				color += diffuse(origin, intersection_point, intersecting_shape_index, i);
 				color += specular(origin, intersection_point, intersecting_shape_index, i);
 			}
 		}
 
-		color /= (float)lights.size();
+		color /= (float)scene_lights.size();
 		color += shape.color * ambient_light;
 	}
 
@@ -253,7 +253,7 @@ glm::vec4 Game::send_ray(glm::vec3 origin, glm::vec3 direction, int previous_int
 
 std::vector<glm::vec3> Game::check_shape_intersection(int shape_index, glm::vec3 origin, glm::vec3 direction, int num_of_call)
 {
-	MyShape shape = my_shapes[shape_index];
+	MyShape shape = scene_shapes[shape_index];
 	glm::vec3 intersection_point1(-INFINITY, -INFINITY, -INFINITY);
 	glm::vec3 intersection_point2(-INFINITY, -INFINITY, -INFINITY);
 	std::vector<glm::vec3> intersection_points;
@@ -308,7 +308,7 @@ std::vector<glm::vec3> Game::check_shape_intersection(int shape_index, glm::vec3
 
 bool Game::check_light_intersection(int light_index, int intersecting_shape_index, glm::vec3 intersection_point)
 {
-	Light light = lights[light_index];
+	Light light = scene_lights[light_index];
 
 	bool is_directional_or_intersection_point_is_in_the_spotlight = false;
 	glm::vec3 direction_from_light = glm::normalize(light.direction);
@@ -322,8 +322,8 @@ bool Game::check_light_intersection(int light_index, int intersecting_shape_inde
 	}
 
 	if (is_directional_or_intersection_point_is_in_the_spotlight) {
-		for (int i = 0; i < my_shapes.size(); i++) {
-			if (i != intersecting_shape_index && my_shapes[i].coordinates[3] > 0) {
+		for (int i = 0; i < scene_shapes.size(); i++) {
+			if (i != intersecting_shape_index && scene_shapes[i].coordinates[3] > 0) {
 				// fursther intersection point
 				std::vector<glm::vec3> light_intersection_points = check_shape_intersection(i, intersection_point, -direction_from_light, 0);
 				if (light_intersection_points[0][0] != -INFINITY) {
@@ -348,7 +348,7 @@ bool Game::check_light_intersection(int light_index, int intersecting_shape_inde
 glm::vec4 Game::diffuse(glm::vec3 origin, glm::vec3 intersection_point, int shape_index, int light_index)
 {
 	glm::vec4 diffuse_color(0.f, 0.f, 0.f, 0.f);
-	MyShape shape = my_shapes[shape_index];
+	MyShape shape = scene_shapes[shape_index];
 	glm::vec3 N = glm::normalize(glm::vec3(shape.coordinates));
 	if (shape.coordinates[3] > 0) {
 		//shape is a sphere
@@ -360,7 +360,7 @@ glm::vec4 Game::diffuse(glm::vec3 origin, glm::vec3 intersection_point, int shap
 			N = N * -1.f;
 	}
 
-	Light light = lights[light_index];
+	Light light = scene_lights[light_index];
 	glm::vec3 Li = glm::normalize(-light.direction);
 	if (light.cos_of_angle != INFINITY) {
 		//light is a spotlight
@@ -389,7 +389,7 @@ glm::vec4 Game::specular(glm::vec3 origin, glm::vec3 intersection_point, int sha
 		return glm::vec4(1.f, 1.f, 1.f, 1.f);
 	}
 	
-	MyShape shape = my_shapes[shape_index];
+	MyShape shape = scene_shapes[shape_index];
 	glm::vec3 N = glm::normalize(glm::vec3(shape.coordinates));
 	glm::vec4 specular_color(0.f, 0.f, 0.f, 0.f);
 	if (shape.coordinates[3] > 0) {
@@ -402,7 +402,7 @@ glm::vec4 Game::specular(glm::vec3 origin, glm::vec3 intersection_point, int sha
 			N = N * -1.f;
 	}
 
-	Light light = lights[light_index];
+	Light light = scene_lights[light_index];
 	glm::vec3 direction_from_light = light.direction;
 	if (light.cos_of_angle != INFINITY) {
 		//light is a spotlight
@@ -412,7 +412,7 @@ glm::vec4 Game::specular(glm::vec3 origin, glm::vec3 intersection_point, int sha
 	glm::vec3 V = glm::normalize(origin - intersection_point);
 	glm::vec3 Ri = glm::normalize(glm::reflect(direction_from_light, N));
 	
-	specular_color += SPECULARVALUE * pow(std::max(0.f, glm::dot(V, Ri)), shape.shininess) * light.intensity;
+	specular_color += REFLECTIVITY * pow(std::max(0.f, glm::dot(V, Ri)), shape.shininess) * light.intensity;
 
 	return specular_color;
 }
@@ -466,12 +466,12 @@ void Game::parse_scene(std::string& scene_path)
 
 				MyShape shape = MyShape(splitted[0], glm::vec4(std::stof(splitted[1]), std::stof(splitted[2]),
 					std::stof(splitted[3]), std::stof(splitted[4])));
-				my_shapes.push_back(shape);
+				scene_shapes.push_back(shape);
 
 			}
 
 			else if (splitted[0] == "c") {
-				my_shapes[colorInstruction].set_color_and_shininess(glm::vec4(std::stof(splitted[1]), std::stof(splitted[2]),
+				scene_shapes[colorInstruction].set_color_and_shininess(glm::vec4(std::stof(splitted[1]), std::stof(splitted[2]),
 					std::stof(splitted[3]), std::stof(splitted[4])));
 				colorInstruction += 1;
 
@@ -484,18 +484,18 @@ void Game::parse_scene(std::string& scene_path)
 					spotlightsIndexes.push_back(spotlightIndex);
 
 				spotlightIndex += 1;
-				lights.push_back(light);
+				scene_lights.push_back(light);
 			}
 
 			else if (splitted[0] == "p") {
-				lights[spotlightsIndexes[0]].set_location(glm::vec4(std::stof(splitted[1]), std::stof(splitted[2]),
+				scene_lights[spotlightsIndexes[0]].set_location(glm::vec4(std::stof(splitted[1]), std::stof(splitted[2]),
 					std::stof(splitted[3]), std::stof(splitted[4])));
 				spotlightsIndexes.erase(spotlightsIndexes.begin());
 
 			}
 
 			else if (splitted[0] == "i") {
-				lights[intensityInstruction].set_intensity(glm::vec4(std::stof(splitted[1]), std::stof(splitted[2]),
+				scene_lights[intensityInstruction].set_intensity(glm::vec4(std::stof(splitted[1]), std::stof(splitted[2]),
 					std::stof(splitted[3]), std::stof(splitted[4])));
 				intensityInstruction += 1;
 			}
