@@ -172,81 +172,98 @@ std::vector<glm::vec3> Game::anti_aliasing(int i, int j)
 }
 
 
-glm::vec4 Game::send_ray(glm::vec3 origin, glm::vec3 direction, int previous_intersecting_shape_index, int num_of_call)
+glm::vec4 Game::send_ray(glm::vec3 ray_origin, glm::vec3 ray_direction, int previous_intersecting_shape_index, int num_of_call)
 {	
+	// Terminate if the maximum recursion depth has been reached to avoid infinite loops.
 	if (num_of_call == MAX_RECURSION_DEPTH)
 		return glm::vec4(0.f, 0.f, 0.f, 0.f);
 	
-	glm::vec3 intersection_point(-INFINITY, -INFINITY, -INFINITY);
+	// Initialize variables to track the closest intersection point.
+	glm::vec3 closest_hit_point(-INFINITY, -INFINITY, -INFINITY);
 	int intersecting_shape_index = -1;
 	float dist_to_intersection = INFINITY;
+
+	// Loop through all the shapes in the scene to find intersections with the ray.
 	for (int i = 0; i < scene_shapes.size(); i++) {
+		// Skip the shape if it was the last intersected shape to prevent self-intersection.
 		if (i != previous_intersecting_shape_index) {
-			glm::vec3 new_intersection_point = check_shape_intersection(i, origin, direction, 0)[0];
-			float new_dist = glm::length(new_intersection_point - origin);
+			glm::vec3 new_intersection_point = check_shape_intersection(i, ray_origin, ray_direction, 0)[0];
+			float new_dist = glm::length(new_intersection_point - ray_origin);
+			// Check if this is the closest intersection so far.
 			if (new_dist < dist_to_intersection) {
-				intersection_point = new_intersection_point;
+				closest_hit_point = new_intersection_point;
 				intersecting_shape_index = i;
 				dist_to_intersection = new_dist;
 			}
 		}
 	}
 
+	// Initialize color to black, which will accumulate the calculated color.
 	glm::vec4 color(0.f, 0.f, 0.f, 0.f);
+
+	// Check if an intersection was found and if we are not at the last recursion depth.
 	if (intersecting_shape_index != -1 && num_of_call < MAX_RECURSION_DEPTH - 1) {
 		MyShape shape = scene_shapes[intersecting_shape_index];
+		// Correct the normal if the intersection is with the inside of a shape.
+		glm::vec3 N = shape.get_normal(closest_hit_point);
+		if (shape.coordinates[3] < 0 && glm::dot(N, ray_direction) < 0)
+			N = N * -1.f;
+
+		// Reflective material handling.
 		if (shape.o_r_t == "r") {
-			glm::vec3 N = shape.get_normal(intersection_point);
-
-			if (shape.coordinates[3] < 0 && glm::dot(N, direction) < 0)
-				N = N * -1.f;
-			glm::vec3 R = glm::reflect(direction, N);
-			return color += send_ray(intersection_point, R, intersecting_shape_index, num_of_call + 1);
-		} else if (shape.o_r_t == "t") {
-			glm::vec3 N = shape.get_normal(intersection_point);
-			if (shape.coordinates[3] < 0 && glm::dot(N, direction) < 0)
-				N = N * -1.f;
-
+			glm::vec3 R = glm::reflect(ray_direction, N);
+			// Recursively send a new ray in the reflection direction.
+			return color += send_ray(closest_hit_point, R, intersecting_shape_index, num_of_call + 1);
+		}
+		// Transparent material handling.
+		else if (shape.o_r_t == "t") {
+			glm::vec3 refracted_direction;
+			// Check if the intersection is with a plane or a sphere to handle refraction.
 			if (shape.coordinates[3] < 0) {
-				//plane
-				glm::vec3 refracted_direction = glm::normalize(glm::refract(direction, N, 1.f/1.5f));
-				return color += send_ray(intersection_point, refracted_direction, intersecting_shape_index, num_of_call + 1);
+				// Handle refraction for a plane.
+				refracted_direction = glm::normalize(glm::refract(ray_direction, N, 1.f/1.5f));
+				return color += send_ray(closest_hit_point, refracted_direction, intersecting_shape_index, num_of_call + 1);
 			} else {
-				//sphere
-				glm::vec3 refracted_direction = glm::normalize(glm::refract(direction, N, 1.f/1.5f));
-				glm::vec3 second_intersection_point = check_shape_intersection(intersecting_shape_index, intersection_point, refracted_direction, num_of_call + 1)[1];
+				// Handle refraction for a sphere.
+				refracted_direction = glm::normalize(glm::refract(ray_direction, N, 1.f/1.5f));
+				glm::vec3 second_intersection_point = check_shape_intersection(intersecting_shape_index, closest_hit_point, refracted_direction, num_of_call + 1)[1];
 				N = shape.get_normal(second_intersection_point) * -1.f;
 				refracted_direction = glm::normalize(glm::refract(refracted_direction, N, 1.5f));
+				// If it's the first recursion call, add lighting effects.
 				if (num_of_call == 0) {
 					for (int i = 0; i < scene_lights.size(); i++) {
-						if (check_light_intersection(i, intersecting_shape_index, intersection_point)) {
-							color += specular(origin, intersection_point, intersecting_shape_index, i);
+						if (check_light_intersection(i, intersecting_shape_index, closest_hit_point)) {
+							color += specular(ray_origin, closest_hit_point, intersecting_shape_index, i);
 						}
 					}
-					color += shape.color * ambient_light;
+					color += shape.color * ambient_light; // Add ambient light to the color.
 				}
-
 				return color += send_ray(second_intersection_point, refracted_direction, intersecting_shape_index, num_of_call + 1);
 			}
 		}
 	}
 	
+	// If an intersection was found, but we're at the last recursion depth, handle local illumination.
 	if (intersecting_shape_index != -1) {
 		MyShape shape = scene_shapes[intersecting_shape_index];
 
+		// Calculate local illumination effects from each light source in the scene.
 		for (int i = 0; i < scene_lights.size(); i++) {
-			if (check_light_intersection(i, intersecting_shape_index, intersection_point)) {
-				color += diffuse(origin, intersection_point, intersecting_shape_index, i);
-				color += specular(origin, intersection_point, intersecting_shape_index, i);
+			if (check_light_intersection(i, intersecting_shape_index, closest_hit_point)) {
+				color += diffuse(ray_origin, closest_hit_point, intersecting_shape_index, i);
+				color += specular(ray_origin, closest_hit_point, intersecting_shape_index, i);
 			}
 		}
 
-		color /= (float)scene_lights.size();
+		// Average the color by the number of lights and add the shape's own color.
+		color /= static_cast<float>(scene_lights.size());
 		color += shape.color * ambient_light;
 	}
 
-	return color*255.f;
+	// Return the calculated color, scaled to the range [0, 255].
+	return color * 255.f;
 }
+
 
 std::vector<glm::vec3> Game::check_shape_intersection(int shape_index, glm::vec3 origin, glm::vec3 direction, int num_of_call)
 {
