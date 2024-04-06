@@ -20,6 +20,8 @@ int main(int argc,char *argv[])
 	scn->Init();
 
 	display.SetScene(scn);
+	display.AddKeyCallBack(scn->my_key_callback);
+	display.AddMouseCallBacks(scn->my_mouse_callback, scn->my_scroll_callback, scn->my_cursor_position_callback);
 
 	while(!display.CloseWindow())
 	{
