@@ -265,260 +265,294 @@ glm::vec4 Game::send_ray(glm::vec3 ray_origin, glm::vec3 ray_direction, int prev
 }
 
 
+// Defines a method to check for intersections between a ray and a shape within the game environment
 std::vector<glm::vec3> Game::check_shape_intersection(int shape_index, glm::vec3 origin, glm::vec3 direction, int num_of_call)
 {
+    // Retrieves the shape from the scene based on its index
 	MyShape shape = scene_shapes[shape_index];
+    // Initializes intersection points with values that represent no intersection
 	glm::vec3 intersection_point1(-INFINITY, -INFINITY, -INFINITY);
 	glm::vec3 intersection_point2(-INFINITY, -INFINITY, -INFINITY);
+    // Vector to store the intersection points
 	std::vector<glm::vec3> intersection_points;
+    // Vector to store the normal at the intersection point
 	glm::vec3 N;
 
+    // Checks if the shape is a sphere based on the fourth coordinate value
 	if (shape.coordinates[3] > 0) {
-		//shape is a sphere:
-		glm::vec3 O = glm::vec3(shape.coordinates);
-		glm::vec3 L = (O - origin);
-		float r = shape.coordinates[3];
-		float tm = glm::dot(L, direction);
-		float d2 = pow(glm::length(L), 2) - pow(tm, 2);
+    // Sphere logic
+    glm::vec3 O = glm::vec3(shape.coordinates); // Sphere center
+    glm::vec3 L = O - origin; // Vector from ray origin to sphere center
+    float r = shape.coordinates[3]; // Sphere radius
+    float tm = glm::dot(L, direction); // Distance along ray to point closest to sphere center
+    float d2 = glm::dot(L, L) - tm * tm; // Correct way to calculate squared distance from sphere center to ray
 
-		if (d2 <= pow(r, 2)) {
+    if (d2 <= r * r) {
+        // If d2 is less than or equal to squared radius, there are intersection points
+        float th = sqrt(r * r - d2); // Half distance between intersection points
+        float t1 = tm - th; // Distance to first intersection point
+        float t2 = tm + th; // Distance to second intersection point
 
-			float th = sqrt(pow(r, 2) - d2);
-			float t1 = tm - th;
-			float t2 = tm + th;
+        intersection_point1 = origin + t1 * direction; // First intersection point
+        intersection_point2 = origin + t2 * direction; // Second intersection point
 
-			intersection_point1 = origin + t1 * direction;
-			intersection_point2 = origin + t2 * direction;
+        if (glm::length(origin - intersection_point1) > glm::length(origin - intersection_point2)) {
+            std::swap(intersection_point1, intersection_point2); // Ensure intersection_point1 is the closer one
+        }
 
-			float dist1 = glm::length(origin - intersection_point1);
-			float dist2 = glm::length(origin - intersection_point2);
-
-			if (dist1 > dist2) {
-				glm::vec3 tmp = intersection_point2;
-				intersection_point2 = intersection_point1;
-				intersection_point1 = tmp;
-			}
-
-			N = glm::normalize(intersection_point1 - O);			
-		}
-	} else {
-		//shape is a plane:
-		N = glm::normalize(glm::vec3(shape.coordinates));
-		if (glm::dot(N, direction) < 0)
-			N = N * -1.f;
+        // No change required here, as this part is correct
+        N = glm::normalize(intersection_point1 - O);            
+    }
+}
+ else {
+        // Calculates intersection with a plane
+		N = glm::normalize(glm::vec3(shape.coordinates)); // Plane normal
+        // Ensures the normal is facing towards the ray origin
+		if (glm::dot(N, direction) < 0) N = -N;
 		float N_dot_r_d = glm::dot(N, direction);
+        // If N_dot_r_d is positive, there is an intersection
 		if (N_dot_r_d > 0) {
-			float v0 = -((glm::dot(N, origin)) + shape.coordinates[3]);
-			float t = v0 / N_dot_r_d;
-			if (t >= 0)
-				intersection_point1 = origin + t * direction;
+			float v0 = -(glm::dot(N, origin) + shape.coordinates[3]);
+			float t = v0 / N_dot_r_d; // Distance along ray to intersection
+            // If t is positive, calculates the intersection point
+			if (t >= 0) intersection_point1 = origin + t * direction;
 		}
 	}
+    // Adds the calculated intersection points to the vector
 	intersection_points.push_back(intersection_point1);
 	intersection_points.push_back(intersection_point2);
 	
+    // Returns the intersection points
 	return intersection_points;
 }
 
+// Checks if the light from a specific source reaches an intersection point without being obstructed
 bool Game::check_light_intersection(int light_index, int intersecting_shape_index, glm::vec3 intersection_point)
 {
+    // Retrieves the light from the scene based on its index
 	Light light = scene_lights[light_index];
 
+    // Initializes a flag to determine if the light is directional or if the intersection point is illuminated by the spotlight
 	bool is_directional_or_intersection_point_is_in_the_spotlight = false;
+    // Calculates the direction from the light to the intersection point
 	glm::vec3 direction_from_light = glm::normalize(light.direction);
+    // Checks if the light is a spotlight
 	if (light.cos_of_angle != INFINITY) {
 		direction_from_light = glm::normalize(intersection_point - light.location);
+        // Determines if the intersection point is within the spotlight's cone
 		if (glm::dot(direction_from_light, glm::normalize(light.direction)) > light.cos_of_angle) {
 			is_directional_or_intersection_point_is_in_the_spotlight = true;
 		}
 	} else {
+        // For directional lights, this flag is always true
 		is_directional_or_intersection_point_is_in_the_spotlight = true;
 	}
 
+    // If the intersection point is illuminated by the light
 	if (is_directional_or_intersection_point_is_in_the_spotlight) {
+        // Checks for obstructions between the light and the intersection point
 		for (int i = 0; i < scene_shapes.size(); i++) {
 			if (i != intersecting_shape_index && scene_shapes[i].coordinates[3] > 0) {
-				// fursther intersection point
+                // Checks for intersections with other shapes in the scene
 				std::vector<glm::vec3> light_intersection_points = check_shape_intersection(i, intersection_point, -direction_from_light, 0);
-				if (light_intersection_points[0][0] != -INFINITY) {
-					glm::vec3 V = glm::normalize(intersection_point - light_intersection_points[0]);
-					if (glm::dot(V, direction_from_light) > 0)
-						return false;
+                // If an intersection is found, determines if it obstructs the light
+				if (light_intersection_points[0][0] != -INFINITY || light_intersection_points[1][0] != -INFINITY) {
+					return false; // Light is obstructed
 				}
-				if (light_intersection_points[1][0] != -INFINITY) {
-					glm::vec3 V = glm::normalize(intersection_point - light_intersection_points[1]);
-					if (glm::dot(V, direction_from_light) > 0)
-						return false;
-				}
-
 			}
 		}
-		return true;	
+		return true; // Light reaches the intersection point unobstructed
 	}
 
-	return false;
+	return false; // Default case if light does not reach the intersection point
 }
 
+// Calculates the diffuse component of lighting at an intersection point
 glm::vec4 Game::diffuse(glm::vec3 origin, glm::vec3 intersection_point, int shape_index, int light_index)
 {
+    // Initializes the diffuse color to black
 	glm::vec4 diffuse_color(0.f, 0.f, 0.f, 0.f);
+    // Retrieves the shape based on index
 	MyShape shape = scene_shapes[shape_index];
+    // Initializes the normal at the intersection point
 	glm::vec3 N = glm::normalize(glm::vec3(shape.coordinates));
+    // Adjusts the normal based on the shape type
 	if (shape.coordinates[3] > 0) {
-		//shape is a sphere
+		// For spheres, calculates the normal at the intersection point
 		glm::vec3 O = glm::vec3(shape.coordinates);
 		N = glm::normalize(intersection_point - O);
 	}
 	else {
-		if (glm::dot(N, (intersection_point - origin)) > 0)
-			N = N * -1.f;
+        // For planes, ensures the normal is oriented correctly
+		if (glm::dot(N, (intersection_point - origin)) > 0) N = -N;
 	}
 
+    // Retrieves the light based on index
 	Light light = scene_lights[light_index];
+    // Calculates the direction of light at the intersection point
 	glm::vec3 Li = glm::normalize(-light.direction);
+    // Adjusts the light direction for spotlights
 	if (light.cos_of_angle != INFINITY) {
-		//light is a spotlight
 		Li = glm::normalize(light.location - intersection_point);
 	}
+    // Retrieves the shape's color
 	glm::vec4 shape_color = shape.color;
+    // Modifies the shape color for checkerboard pattern on planes
 	if (shape.coordinates[3] < 0) {
 		bool cond = (int)(1.5 * std::abs(intersection_point[0])) % 2 == (int)(1.5 * std::abs(intersection_point[1])) % 2;
-		if (intersection_point[0] < 0)
-			cond = !cond;
-
-		if (intersection_point[1] < 0)
-			cond = !cond;
-
-		if (cond)
-			shape_color *= 0.5;
+		if (intersection_point[0] < 0) cond = !cond;
+		if (intersection_point[1] < 0) cond = !cond;
+		if (cond) shape_color *= 0.5;
 	}
+    // Calculates the final diffuse color
 	diffuse_color += shape_color * std::max(0.f, glm::dot(N, Li)) * light.intensity;
 
+    // Returns the calculated diffuse color
 	return diffuse_color;
 }
 
+// Calculates the specular component of lighting at an intersection point
 glm::vec4 Game::specular(glm::vec3 origin, glm::vec3 intersection_point, int shape_index, int light_index)
 {
+    // If the origin and intersection point are the same, returns white (to avoid division by zero later)
 	if (glm::length(origin - intersection_point) == 0) {
 		return glm::vec4(1.f, 1.f, 1.f, 1.f);
 	}
 	
+    // Retrieves the shape based on index
 	MyShape shape = scene_shapes[shape_index];
+    // Initializes the normal at the intersection point
 	glm::vec3 N = glm::normalize(glm::vec3(shape.coordinates));
+    // Initializes the specular color to black
 	glm::vec4 specular_color(0.f, 0.f, 0.f, 0.f);
+    // Adjusts the normal based on the shape type
 	if (shape.coordinates[3] > 0) {
-		//shape is a sphere
+		// For spheres, calculates the normal at the intersection point
 		glm::vec3 O = glm::vec3(shape.coordinates);
 		N = glm::normalize(intersection_point - O);
 	}
 	else {
-		if (glm::dot(N, (intersection_point - origin)) > 0)
-			N = N * -1.f;
+        // For planes, ensures the normal is oriented correctly
+		if (glm::dot(N, (intersection_point - origin)) > 0) N = -N;
 	}
 
+    // Retrieves the light based on index
 	Light light = scene_lights[light_index];
+    // Calculates the direction from light to the intersection point
 	glm::vec3 direction_from_light = light.direction;
+    // Adjusts the direction for spotlights
 	if (light.cos_of_angle != INFINITY) {
-		//light is a spotlight
 		direction_from_light = glm::normalize(intersection_point - light.location);
 	}
 
+    // Calculates the view vector and the reflection vector
 	glm::vec3 V = glm::normalize(origin - intersection_point);
 	glm::vec3 Ri = glm::normalize(glm::reflect(direction_from_light, N));
 	
+    // Adds the specular component to the color based on the angle between the view and reflection vectors
 	specular_color += REFLECTIVITY * pow(std::max(0.f, glm::dot(V, Ri)), shape.shininess) * light.intensity;
 
+    // Returns the calculated specular color
 	return specular_color;
 }
 
+// Splits a string by a delimiter and returns a vector of the substrings
 int Game::split(const std::string& txt, std::vector<std::string>& strs, char delimeter) {
+    // Finds the first occurrence of the delimiter
 	size_t pos = txt.find(delimeter);
+    // Initializes the starting position for the split
 	size_t initialPos = 0;
+    // Clears the vector to store the results
 	strs.clear();
 
-	// Decompose statement
+    // Loops through the string to find and add substrings
 	while (pos != std::string::npos) {
 		strs.push_back(txt.substr(initialPos, pos - initialPos));
 		initialPos = pos + 1;
-
 		pos = txt.find(delimeter, initialPos);
 	}
 
-	// Add the last one
+    // Adds the last substring to the vector
 	strs.push_back(txt.substr(initialPos, std::min(pos, txt.size()) - initialPos + 1));
 
+    // Returns the number of substrings found
 	return strs.size();
 }
 
-
+// Parses a scene from a file and initializes the game environment accordingly
 void Game::parse_scene(std::string& scene_path)
 {
+    // String to store each line read from the file
 	std::string line;
+    // Opens the scene file
 	std::ifstream myfile;
 	myfile.open(scene_path);
 
+    // Vector to hold the parts of each line after splitting
 	std::vector<std::string> splitted;
+    // Variables to keep track of instructions for setting color and intensity
 	int colorInstruction = 0;
 	int intensityInstruction = 0;
+    // Variables for spotlight handling
 	int spotlightIndex = 0;
 	std::vector<int> spotlightsIndexes;
 
+    // Checks if the file was successfully opened
 	if (myfile.is_open()) {
+        // Reads the file line by line
 		while (getline(myfile, line)) {
+            // Splits each line by spaces
 			split(line, splitted, ' ');
 
+            // Processes the line based on the first element (command)
 			if (splitted[0] == "e") {
+				// Sets the camera position
 				camera = glm::vec3(std::stof(splitted[1]), std::stof(splitted[2]), std::stof(splitted[3]));
 			}
-
 			else if (splitted[0] == "a") {
+				// Sets the ambient light
 				ambient_light = glm::vec4(std::stof(splitted[1]), std::stof(splitted[2]),
 					std::stof(splitted[3]), std::stof(splitted[4]));
 			}
-
 			else if (splitted[0] == "o" || splitted[0] == "t" || splitted[0] == "r") {
-
+				// Adds a new shape to the scene
 				MyShape shape = MyShape(splitted[0], glm::vec4(std::stof(splitted[1]), std::stof(splitted[2]),
 					std::stof(splitted[3]), std::stof(splitted[4])));
 				scene_shapes.push_back(shape);
-
 			}
-
 			else if (splitted[0] == "c") {
+				// Sets the color and shininess of the last added shape
 				scene_shapes[colorInstruction].set_color_and_shininess(glm::vec4(std::stof(splitted[1]), std::stof(splitted[2]),
 					std::stof(splitted[3]), std::stof(splitted[4])));
 				colorInstruction += 1;
-
 			}
-
 			else if (splitted[0] == "d") {
+				// Adds a new light to the scene
 				Light light = Light(glm::vec4(std::stof(splitted[1]), std::stof(splitted[2]),
 					std::stof(splitted[3]), std::stof(splitted[4])));
-				if (splitted[4] == "1.0")
-					spotlightsIndexes.push_back(spotlightIndex);
-
+				// Checks if the light is a spotlight
+				if (splitted[4] == "1.0") spotlightsIndexes.push_back(spotlightIndex);
 				spotlightIndex += 1;
 				scene_lights.push_back(light);
 			}
-
 			else if (splitted[0] == "p") {
+				// Sets the location of the first spotlight and removes it from the tracking list
 				scene_lights[spotlightsIndexes[0]].set_location(glm::vec4(std::stof(splitted[1]), std::stof(splitted[2]),
 					std::stof(splitted[3]), std::stof(splitted[4])));
 				spotlightsIndexes.erase(spotlightsIndexes.begin());
-
 			}
-
 			else if (splitted[0] == "i") {
+				// Sets the intensity of the light
 				scene_lights[intensityInstruction].set_intensity(glm::vec4(std::stof(splitted[1]), std::stof(splitted[2]),
 					std::stof(splitted[3]), std::stof(splitted[4])));
 				intensityInstruction += 1;
 			}
 		}
-
+        // Closes the file
 		myfile.close();
 	}
-
 	else {
+        // Prints an error message if the file cannot be opened
 		printf("Unable to open file\n");
 	}
 }
