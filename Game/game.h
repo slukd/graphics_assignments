@@ -25,8 +25,6 @@ public:
     static void my_cursor_position_callback(GLFWwindow *window, double xpos, double ypos);
     static void my_scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
     void generate(GLFWwindow* window);
-    void solve(GLFWwindow *window);
-	int recursive_solve(GLFWwindow* window, map<vector<vector<vector<Shape*>>>, tuple<int, tuple<char, int, float, int>>>& memo, vector<tuple<char, int, float, int>>& steps);
 	void rotate_cube_axes(glm::vec3 axis, float angle);
     void switch_cube_axes(char axis, float angle);
     void rotate_cube(float angle, glm::vec3 axis);
