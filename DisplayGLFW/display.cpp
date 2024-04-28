@@ -1,6 +1,6 @@
 //#define GLEW_STATIC
-#include "glad/include/glad/glad.h"
 #include <iostream>
+#include "../res/includes/glad/include/glad/glad.h"
 #include "display.h"
 
 Display::Display(int width, int height, const std::string& title)
@@ -8,6 +8,16 @@ Display::Display(int width, int height, const std::string& title)
 	/* Initialize the library */
     if (!glfwInit())
         error =  -1;
+
+    glfwWindowHint(GLFW_SAMPLES, 8);
+   
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+
+	#ifdef __APPLE__
+	    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+	#endif
 
 	m_window = glfwCreateWindow(width, height, title.c_str(), NULL, NULL);
 	if(!m_window)
@@ -23,6 +33,7 @@ Display::Display(int width, int height, const std::string& title)
 		printf("Failed to load OpenGL and its extensions\n");
 		exit(EXIT_FAILURE);
 	}
+	 glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 	/*GLenum res = glewInit();
     if(res != GLEW_OK)
    {
@@ -87,9 +98,18 @@ bool Display::IsFullscreen( void )
 void Display::SwapBuffers()
 {
 	glfwSwapBuffers(m_window);
+	// #ifdef __APPLE__
+    //     static bool first_time_hack = true;
+    //     if (first_time_hack) {
+    //         glfwHideWindow(m_window);
+    //         glfwShowWindow(m_window);
+    //         first_time_hack = false;
+    //     }
+	// #endif
 }
 
 void Display::PollEvents()
 {
 	glfwPollEvents();
+
 }
