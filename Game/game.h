@@ -25,8 +25,8 @@ public:
     static void my_cursor_position_callback(GLFWwindow *window, double xpos, double ypos);
     static void my_scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
     void generate(GLFWwindow* window);
-	void rotate_cube_axes(glm::vec3 axis, float angle);
-    void switch_cube_axes(char axis, float angle);
+	void rotate_cube_axis(glm::vec3 axis, float angle);
+    void switch_cube_axis(char axis, float angle);
     void rotate_cube(float angle, glm::vec3 axis);
     vector<vector<vector<Shape*>>> make_cube();
     bool rotate_face(float angle, glm::vec3 axis, int index, map<Face, float>& angles_rotated);
