@@ -147,34 +147,6 @@ void Game::ray_tracing(std::string &scene_path, unsigned char *data)
 	}
 }
 
-// Calculates sub-pixel coordinates for anti-aliasing within a pixel.
-// Anti-aliasing is achieved by sampling at several points within each pixel and averaging the results.
-std::vector<glm::vec3> Game::anti_aliasing(int i, int j)
-{
-	// Adjust the calculation for the Y-coordinate to flip the image vertically.
-	// This change ensures the top of the image corresponds to the top of the viewport.
-	float top_left_corner_of_pixel_y = 1.f - (2.f * i) / HEIGHT;
-	float top_left_corner_of_pixel_x = -1.f + (2.f * j) / WIDTH;
-
-	std::vector<glm::vec3> pixel_coordinates; // Stores the sub-pixel coordinates.
-
-	// Sampling points within the pixel to perform anti-aliasing.
-	for (int subY = 1; subY <= 2; ++subY)
-	{
-		for (int subX = 1; subX <= 2; ++subX)
-		{
-			// Adjust sub-pixel's Y-position calculation to align with the flipped Y-axis.
-			float pixel_y = top_left_corner_of_pixel_y - (PIXELHEIGHT * subY / 3.f) + PIXELHEIGHT / 2.f;
-			float pixel_x = top_left_corner_of_pixel_x + (PIXELWIDTH * subX / 3.f) - PIXELWIDTH / 2.f;
-
-			// Add the calculated sub-pixel coordinate to the list.
-			pixel_coordinates.emplace_back(pixel_x, pixel_y, 0.f);
-		}
-	}
-
-	return pixel_coordinates;
-}
-
 glm::vec4 Game::send_ray(glm::vec3 ray_origin, glm::vec3 ray_direction, int previous_intersecting_shape_index, int num_of_call)
 {
 	// Terminate if the maximum recursion depth has been reached to avoid infinite loops.
@@ -282,6 +254,34 @@ glm::vec4 Game::send_ray(glm::vec3 ray_origin, glm::vec3 ray_direction, int prev
 	return color * 255.f;
 }
 
+// Calculates sub-pixel coordinates for anti-aliasing within a pixel.
+// Anti-aliasing is achieved by sampling at several points within each pixel and averaging the results.
+std::vector<glm::vec3> Game::anti_aliasing(int i, int j)
+{
+	// Adjust the calculation for the Y-coordinate to flip the image vertically.
+	// This change ensures the top of the image corresponds to the top of the viewport.
+	float top_left_corner_of_pixel_y = 1.f - (2.f * i) / HEIGHT;
+	float top_left_corner_of_pixel_x = -1.f + (2.f * j) / WIDTH;
+
+	std::vector<glm::vec3> pixel_coordinates; // Stores the sub-pixel coordinates.
+
+	// Sampling points within the pixel to perform anti-aliasing.
+	for (int subY = 1; subY <= 2; ++subY)
+	{
+		for (int subX = 1; subX <= 2; ++subX)
+		{
+			// Adjust sub-pixel's Y-position calculation to align with the flipped Y-axis.
+			float pixel_y = top_left_corner_of_pixel_y - (PIXELHEIGHT * subY / 3.f) + PIXELHEIGHT / 2.f;
+			float pixel_x = top_left_corner_of_pixel_x + (PIXELWIDTH * subX / 3.f) - PIXELWIDTH / 2.f;
+
+			// Add the calculated sub-pixel coordinate to the list.
+			pixel_coordinates.emplace_back(pixel_x, pixel_y, 0.f);
+		}
+	}
+
+	return pixel_coordinates;
+}
+
 // Defines a method to check for intersections between a ray and a shape within the game environment
 std::vector<glm::vec3> Game::check_shape_intersection(int shape_index, glm::vec3 origin, glm::vec3 direction, int num_of_call)
 {
@@ -350,55 +350,6 @@ std::vector<glm::vec3> Game::check_shape_intersection(int shape_index, glm::vec3
 	return intersection_points;
 }
 
-// Checks if the light from a specific source reaches an intersection point without being obstructed
-bool Game::check_light_intersection(int light_index, int intersecting_shape_index, glm::vec3 intersection_point)
-{
-	// Retrieves the light from the scene based on its index
-	Light light = scene_lights[light_index];
-
-	// Initializes a flag to determine if the light is directional or if the intersection point is illuminated by the spotlight
-	bool is_directional_or_intersection_point_is_in_the_spotlight = false;
-	// Calculates the direction from the light to the intersection point
-	glm::vec3 direction_from_light = glm::normalize(light.direction);
-	// Checks if the light is a spotlight
-	if (light.cos_of_angle != INFINITY)
-	{
-		direction_from_light = glm::normalize(intersection_point - light.location);
-		// Determines if the intersection point is within the spotlight's cone
-		if (glm::dot(direction_from_light, glm::normalize(light.direction)) > light.cos_of_angle)
-		{
-			is_directional_or_intersection_point_is_in_the_spotlight = true;
-		}
-	}
-	else
-	{
-		// For directional lights, this flag is always true
-		is_directional_or_intersection_point_is_in_the_spotlight = true;
-	}
-
-	// If the intersection point is illuminated by the light
-	if (is_directional_or_intersection_point_is_in_the_spotlight)
-	{
-		// Checks for obstructions between the light and the intersection point
-		for (int i = 0; i < scene_shapes.size(); i++)
-		{
-			if (i != intersecting_shape_index && scene_shapes[i].coordinates[3] > 0)
-			{
-				// Checks for intersections with other shapes in the scene
-				std::vector<glm::vec3> light_intersection_points = check_shape_intersection(i, intersection_point, -direction_from_light, 0);
-				// If an intersection is found, determines if it obstructs the light
-				if (light_intersection_points[0][0] != -INFINITY || light_intersection_points[1][0] != -INFINITY)
-				{
-					return false; // Light is obstructed
-				}
-			}
-		}
-		return true; // Light reaches the intersection point unobstructed
-	}
-
-	return false; // Default case if light does not reach the intersection point
-}
-
 // Calculates the diffuse component of lighting at an intersection point
 glm::vec4 Game::diffuse(glm::vec3 origin, glm::vec3 intersection_point, int shape_index, int light_index)
 {
@@ -449,6 +400,55 @@ glm::vec4 Game::diffuse(glm::vec3 origin, glm::vec3 intersection_point, int shap
 
 	// Returns the calculated diffuse color
 	return diffuse_color;
+}
+
+// Checks if the light from a specific source reaches an intersection point without being obstructed
+bool Game::check_light_intersection(int light_index, int intersecting_shape_index, glm::vec3 intersection_point)
+{
+	// Retrieves the light from the scene based on its index
+	Light light = scene_lights[light_index];
+
+	// Initializes a flag to determine if the light is directional or if the intersection point is illuminated by the spotlight
+	bool is_directional_or_intersection_point_is_in_the_spotlight = false;
+	// Calculates the direction from the light to the intersection point
+	glm::vec3 direction_from_light = glm::normalize(light.direction);
+	// Checks if the light is a spotlight
+	if (light.cos_of_angle != INFINITY)
+	{
+		direction_from_light = glm::normalize(intersection_point - light.location);
+		// Determines if the intersection point is within the spotlight's cone
+		if (glm::dot(direction_from_light, glm::normalize(light.direction)) > light.cos_of_angle)
+		{
+			is_directional_or_intersection_point_is_in_the_spotlight = true;
+		}
+	}
+	else
+	{
+		// For directional lights, this flag is always true
+		is_directional_or_intersection_point_is_in_the_spotlight = true;
+	}
+
+	// If the intersection point is illuminated by the light
+	if (is_directional_or_intersection_point_is_in_the_spotlight)
+	{
+		// Checks for obstructions between the light and the intersection point
+		for (int i = 0; i < scene_shapes.size(); i++)
+		{
+			if (i != intersecting_shape_index && scene_shapes[i].coordinates[3] > 0)
+			{
+				// Checks for intersections with other shapes in the scene
+				std::vector<glm::vec3> light_intersection_points = check_shape_intersection(i, intersection_point, -direction_from_light, 0);
+				// If an intersection is found, determines if it obstructs the light
+				if (light_intersection_points[0][0] != -INFINITY || light_intersection_points[1][0] != -INFINITY)
+				{
+					return false; // Light is obstructed
+				}
+			}
+		}
+		return true; // Light reaches the intersection point unobstructed
+	}
+
+	return false; // Default case if light does not reach the intersection point
 }
 
 // Calculates the specular component of lighting at an intersection point
