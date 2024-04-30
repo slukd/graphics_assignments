@@ -92,71 +92,75 @@ void Game::Init()
 
 void Game::edge_detection(unsigned char *data, unsigned char *new_data)
 {
-	unsigned char *smoothed_data = new unsigned char[DATA_SIZE];
-	unsigned char *compute_gradient_data = new unsigned char[DATA_SIZE];
-	float *pixel_theta_data = new float[DATA_SIZE];
-	unsigned char *non_max_suppression_data = new unsigned char[DATA_SIZE];
+    unsigned char *smoothed_data = new unsigned char[DATA_SIZE];
+    unsigned char *gradient_data = new unsigned char[DATA_SIZE];
+    float *gradient_theta_data = new float[DATA_SIZE];
+    unsigned char *non_max_suppressed_data = new unsigned char[DATA_SIZE];
 
-	smoothing(data, smoothed_data);
+    // Perform smoothing on the input data
+    smoothing(data, smoothed_data);
 
-	compute_gradient(smoothed_data, compute_gradient_data, pixel_theta_data);
+    // Compute gradient magnitude and direction
+    compute_gradient(smoothed_data, gradient_data, gradient_theta_data);
 
-	non_max_suppression(compute_gradient_data, non_max_suppression_data, pixel_theta_data);
+    // Apply non-maximum suppression to the gradient magnitude
+    non_max_suppression(gradient_data, non_max_suppressed_data, gradient_theta_data);
 
-	hysteresis(non_max_suppression_data, new_data);
+    // Apply hysteresis thresholding to obtain the final edge map
+    hysteresis(non_max_suppressed_data, data);
 
-	delete[] smoothed_data;
-	delete[] compute_gradient_data;
-	delete[] pixel_theta_data;
-	delete[] non_max_suppression_data;
+    // Free dynamically allocated memory
+    delete[] smoothed_data;
+    delete[] gradient_data;
+    delete[] gradient_theta_data;
+    delete[] non_max_suppressed_data;
 }
 
-void Game::convolution(unsigned char *data, unsigned char *new_data, std::vector<std::vector<float>> &kernel)
+void Game::convolution(unsigned char *input_data, unsigned char *output_data, std::vector<std::vector<float>> &kernel)
 {
 	const int kernel_size = kernel.size();
 	const int middle = (kernel_size - 1) / 2;
 
-	// generate matrix (in size of kernel) to be multiplied by kernel
-	std::vector<std::vector<float>> matrix(kernel_size, std::vector<float>(kernel_size, 0));
-
-	for (int data_i = 0; data_i < DATA_SIZE; data_i++)
+	// Iterate over each pixel in the image
+	for (int pixel_index = 0; pixel_index < DATA_SIZE; ++pixel_index)
 	{
+		// Convert 1D pixel index to 3D matrix coordinates
+		int row = pixel_index / (NUM_OF_COLORS * WIDTH);
+		int col = (pixel_index % (NUM_OF_COLORS * WIDTH)) / NUM_OF_COLORS;
+		int color_channel = pixel_index % NUM_OF_COLORS;
 
-		int data_row_as_3d_mat = data_i / (NUM_OF_COLORS * WIDTH);
-		int data_column_as_3d_mat = (data_i % (NUM_OF_COLORS * WIDTH)) / NUM_OF_COLORS;
-		int data_color_as_3d_mat = data_i % NUM_OF_COLORS;
+		// Generate matrix (in the size of the kernel) to be multiplied by the kernel
+		std::vector<std::vector<float>> matrix(kernel_size, std::vector<float>(kernel_size, 0));
 
-		for (int matrix_i = 0; matrix_i < kernel_size; matrix_i++)
+		// Populate the matrix with pixel values
+		for (int i = 0; i < kernel_size; ++i)
 		{
-
-			int row = data_row_as_3d_mat - middle + matrix_i;
-			for (int matrix_j = 0; matrix_j < kernel_size; matrix_j++)
+			for (int j = 0; j < kernel_size; ++j)
 			{
+				int r = row - middle + i;
+				int c = col - middle + j;
 
-				int column = data_column_as_3d_mat - middle + matrix_j;
-				if (row >= 0 && column >= 0 && row < HEIGHT && column < WIDTH)
+				// Ensure that the pixel coordinates are within bounds
+				if (r >= 0 && c >= 0 && r < HEIGHT && c < WIDTH)
 				{
-					if (DATA_SIZE <= row * WIDTH * NUM_OF_COLORS + column * NUM_OF_COLORS + data_color_as_3d_mat)
-					{
-						continue;
-					}
-					matrix[matrix_i][matrix_j] = data[row * WIDTH * NUM_OF_COLORS + column * NUM_OF_COLORS + data_color_as_3d_mat];
+					// Copy the pixel value to the matrix
+					matrix[i][j] = input_data[r * WIDTH * NUM_OF_COLORS + c * NUM_OF_COLORS + color_channel];
 				}
 			}
 		}
 
-		// multiply matrix[x][y] with kernel[x][y] and sum up to "new pixel"
-		float new_pixel = 0;
-		for (int matrix_i = 0; matrix_i < kernel_size; matrix_i++)
+		// Multiply the matrix with the kernel and sum up to calculate the new pixel value
+		float new_pixel_value = 0;
+		for (int i = 0; i < kernel_size; ++i)
 		{
-			for (int matrix_j = 0; matrix_j < kernel_size; matrix_j++)
+			for (int j = 0; j < kernel_size; ++j)
 			{
-				new_pixel += matrix[matrix_i][matrix_j] * kernel[matrix_i][matrix_j];
+				new_pixel_value += matrix[i][j] * kernel[i][j];
 			}
 		}
 
-		// update
-		new_data[data_i] = (char)(abs((int)new_pixel));
+		// Update the output data with the new pixel value
+		output_data[pixel_index] = static_cast<unsigned char>(std::abs(static_cast<int>(new_pixel_value)));
 	}
 }
 
