@@ -33,7 +33,7 @@ public:
 
 	virtual void Update(const glm::mat4 &MVP,const glm::mat4 &Normal,const int  shaderIndx) = 0;
 	virtual void WhenTranslate(){};
-	virtual void WhenRotate(){};
+	virtual void WhenRotate(float angle_x, float angle_y){};
 	virtual void Motion(){};
 	virtual void Draw(int shaderIndx,int cameraIndx,int buffer,bool toClear,bool debugMode);
 	virtual ~Scene(void);

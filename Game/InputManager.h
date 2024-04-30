@@ -57,7 +57,8 @@
 	void cursor_position_callback(GLFWwindow* window, double xpos, double ypos)
 	{
 		Game *scn = (Game*)glfwGetWindowUserPointer(window);
-
+		glm::vec3 cube_x_axis(1, 0, 0);
+		glm::vec3 cube_y_axis(0, 1, 0);
 		scn->UpdatePosition((float)xpos,(float)ypos);
 		if(glfwGetMouseButton(window,GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
 		{
